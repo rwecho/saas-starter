@@ -1,9 +1,11 @@
-import { stripe } from '../payments/stripe';
+import { getStripeClient } from '../payments/stripe';
 import { db } from './drizzle';
 import { users, teams, teamMembers } from './schema';
 import { hashPassword } from '@/lib/auth/session';
 
 async function createStripeProducts() {
+  const stripe = getStripeClient();
+
   console.log('Creating Stripe products and prices...');
 
   const baseProduct = await stripe.products.create({
@@ -13,7 +15,7 @@ async function createStripeProducts() {
 
   await stripe.prices.create({
     product: baseProduct.id,
-    unit_amount: 800, // $8 in cents
+    unit_amount: 800,
     currency: 'usd',
     recurring: {
       interval: 'month',
@@ -28,7 +30,7 @@ async function createStripeProducts() {
 
   await stripe.prices.create({
     product: plusProduct.id,
-    unit_amount: 1200, // $12 in cents
+    unit_amount: 1200,
     currency: 'usd',
     recurring: {
       interval: 'month',
@@ -48,9 +50,9 @@ async function seed() {
     .insert(users)
     .values([
       {
-        email: email,
-        passwordHash: passwordHash,
-        role: "owner",
+        email,
+        passwordHash,
+        role: 'owner',
       },
     ])
     .returning();
@@ -70,7 +72,11 @@ async function seed() {
     role: 'owner',
   });
 
-  await createStripeProducts();
+  if (process.env.STRIPE_SECRET_KEY) {
+    await createStripeProducts();
+  } else {
+    console.log('Skipping Stripe product seeding because STRIPE_SECRET_KEY is not configured.');
+  }
 }
 
 seed()
