@@ -1,4 +1,4 @@
-import { getPaymentProvider } from './provider';
+import { getConfiguredPaymentProvider } from './provider';
 import { getPayPalPlans } from './paypal';
 import { getStripePrices, getStripeProducts } from './stripe';
 
@@ -13,7 +13,11 @@ export type PricingPlan = {
 };
 
 export async function getPricingPlans(): Promise<PricingPlan[]> {
-  const provider = getPaymentProvider();
+  const provider = getConfiguredPaymentProvider();
+
+  if (!provider) {
+    return [];
+  }
 
   if (provider === 'paypal') {
     return getPayPalPlans().map((plan) => ({
