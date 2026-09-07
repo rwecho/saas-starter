@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  assertAllowedPayPalPlan,
+  getPayPalPlanName,
   getPayPalSubscription,
   verifyPayPalWebhook,
   type PayPalSubscription,
@@ -9,19 +11,10 @@ import {
   updateTeamSubscription,
 } from '@/lib/db/queries';
 
-function getPlanName(planId: string) {
-  if (planId === process.env.PAYPAL_BASE_PLAN_ID) {
-    return process.env.PAYPAL_BASE_PLAN_NAME || 'Base';
-  }
-  if (planId === process.env.PAYPAL_PLUS_PLAN_ID) {
-    return process.env.PAYPAL_PLUS_PLAN_NAME || 'Plus';
-  }
-  return 'PayPal';
-}
-
 async function syncSubscription(subscription: PayPalSubscription) {
-  let teamId = Number(subscription.custom_id);
+  assertAllowedPayPalPlan(subscription.plan_id);
 
+  let teamId = Number(subscription.custom_id);
   if (!Number.isInteger(teamId) || teamId <= 0) {
     const existingTeam = await getTeamByPayPalSubscriptionId(subscription.id);
     if (!existingTeam) return;
@@ -32,15 +25,14 @@ async function syncSubscription(subscription: PayPalSubscription) {
     paymentProvider: 'paypal',
     paypalSubscriptionId: subscription.id,
     paypalPlanId: subscription.plan_id,
-    planName: getPlanName(subscription.plan_id),
+    planName: getPayPalPlanName(subscription.plan_id),
     subscriptionStatus: subscription.status.toLowerCase(),
   });
 }
 
 export async function POST(request: NextRequest) {
-  const event = await request.json();
-
   try {
+    const event = await request.json();
     const verified = await verifyPayPalWebhook(request.headers, event);
     if (!verified) {
       return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 400 });
