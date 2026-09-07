@@ -2,17 +2,11 @@ import { eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/drizzle';
 import { teams } from '@/lib/db/schema';
-import { getPayPalSubscription } from '@/lib/payments/paypal';
-
-function getPlanName(planId: string) {
-  if (planId === process.env.PAYPAL_BASE_PLAN_ID) {
-    return process.env.PAYPAL_BASE_PLAN_NAME || 'Base';
-  }
-  if (planId === process.env.PAYPAL_PLUS_PLAN_ID) {
-    return process.env.PAYPAL_PLUS_PLAN_NAME || 'Plus';
-  }
-  return 'PayPal';
-}
+import {
+  assertAllowedPayPalPlan,
+  getPayPalPlanName,
+  getPayPalSubscription,
+} from '@/lib/payments/paypal';
 
 export async function GET(request: NextRequest) {
   const subscriptionId =
@@ -25,8 +19,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const subscription = await getPayPalSubscription(subscriptionId);
-    const teamId = Number(subscription.custom_id);
+    assertAllowedPayPalPlan(subscription.plan_id);
 
+    const teamId = Number(subscription.custom_id);
     if (!Number.isInteger(teamId) || teamId <= 0) {
       throw new Error('PayPal subscription is missing a valid team custom_id.');
     }
@@ -37,7 +32,7 @@ export async function GET(request: NextRequest) {
         paymentProvider: 'paypal',
         paypalSubscriptionId: subscription.id,
         paypalPlanId: subscription.plan_id,
-        planName: getPlanName(subscription.plan_id),
+        planName: getPayPalPlanName(subscription.plan_id),
         subscriptionStatus: subscription.status.toLowerCase(),
         updatedAt: new Date(),
       })
