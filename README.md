@@ -1,119 +1,142 @@
 # Next.js SaaS Starter
 
-This is a starter template for building a SaaS application using **Next.js** with support for authentication, Stripe integration for payments, and a dashboard for logged-in users.
-
-**Demo: [https://next-saas-start.vercel.app/](https://next-saas-start.vercel.app/)**
+This is a starter template for building a SaaS application using **Next.js** with authentication, subscription payments, and a dashboard for logged-in users.
 
 ## Features
 
-- Marketing landing page (`/`) with animated Terminal element
-- Pricing page (`/pricing`) which connects to Stripe Checkout
+- Marketing landing page (`/`)
+- Pricing page (`/pricing`)
+- Stripe subscriptions with Stripe Customer Portal
+- PayPal subscriptions as a fallback payment provider
+- Configuration-driven provider selection: Stripe first, PayPal fallback
 - Dashboard pages with CRUD operations on users/teams
 - Basic RBAC with Owner and Member roles
-- Subscription management with Stripe Customer Portal
-- Email/password authentication with JWTs stored to cookies
+- Email/password authentication with JWTs stored in cookies
 - Global middleware to protect logged-in routes
-- Local middleware to protect Server Actions or validate Zod schemas
-- Activity logging system for any user events
+- Activity logging system
 
 ## Tech Stack
 
-- **Framework**: [Next.js](https://nextjs.org/)
-- **Database**: [Postgres](https://www.postgresql.org/)
-- **ORM**: [Drizzle](https://orm.drizzle.team/)
-- **Payments**: [Stripe](https://stripe.com/)
-- **UI Library**: [shadcn/ui](https://ui.shadcn.com/)
+- **Framework**: Next.js
+- **Database**: Postgres
+- **ORM**: Drizzle
+- **Payments**: Stripe + PayPal
+- **UI**: shadcn/ui
+
+## Payment Provider Selection
+
+The application automatically chooses a payment provider from environment configuration:
+
+1. If Stripe is fully configured, Stripe is used.
+2. Otherwise, if PayPal is fully configured, PayPal is used.
+3. If neither provider is configured, checkout fails with an explicit configuration error.
+
+When both Stripe and PayPal are configured, **Stripe always has priority**.
 
 ## Getting Started
 
 ```bash
-git clone https://github.com/nextjs/saas-starter
+git clone https://github.com/rwecho/saas-starter
 cd saas-starter
 pnpm install
-```
-
-## Running Locally
-
-[Install](https://docs.stripe.com/stripe-cli) and log in to your Stripe account:
-
-```bash
-stripe login
-```
-
-Use the included setup script to create your `.env` file:
-
-```bash
 pnpm db:setup
-```
-
-Run the database migrations and seed the database with a default user and team:
-
-```bash
 pnpm db:migrate
 pnpm db:seed
-```
-
-This will create the following user and team:
-
-- User: `test@test.com`
-- Password: `admin123`
-
-You can also create new users through the `/sign-up` route.
-
-Finally, run the Next.js development server:
-
-```bash
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser to see the app in action.
+`pnpm db:setup` now supports either a Stripe-only or PayPal-only local setup.
 
-You can listen for Stripe webhooks locally through their CLI to handle subscription change events:
+## Stripe Configuration
+
+```env
+STRIPE_SECRET_KEY=sk_test_***
+STRIPE_WEBHOOK_SECRET=whsec_***
+```
+
+Stripe webhook endpoint:
+
+```text
+https://yourdomain.com/api/stripe/webhook
+```
+
+For local Stripe testing:
 
 ```bash
 stripe listen --forward-to localhost:3000/api/stripe/webhook
 ```
 
-## Testing Payments
+## PayPal Configuration
 
-To test Stripe payments, use the following test card details:
+```env
+PAYPAL_ENVIRONMENT=sandbox
+PAYPAL_CLIENT_ID=***
+PAYPAL_CLIENT_SECRET=***
+PAYPAL_WEBHOOK_ID=***
+PAYPAL_BASE_PLAN_ID=P-***
+PAYPAL_PLUS_PLAN_ID=P-***
 
-- Card Number: `4242 4242 4242 4242`
-- Expiration: Any future date
-- CVC: Any 3-digit number
+PAYPAL_BASE_PLAN_NAME=Base
+PAYPAL_PLUS_PLAN_NAME=Plus
+PAYPAL_BASE_PRICE_CENTS=800
+PAYPAL_PLUS_PRICE_CENTS=1200
+PAYPAL_CURRENCY=USD
+PAYPAL_BILLING_INTERVAL=month
+PAYPAL_TRIAL_DAYS=7
+```
 
-## Going to Production
+PayPal webhook endpoint:
 
-When you're ready to deploy your SaaS application to production, follow these steps:
+```text
+https://yourdomain.com/api/paypal/webhook
+```
 
-### Set up a production Stripe webhook
+Recommended PayPal subscription webhook events:
 
-1. Go to the Stripe Dashboard and create a new webhook for your production environment.
-2. Set the endpoint URL to your production API route (e.g., `https://yourdomain.com/api/stripe/webhook`).
-3. Select the events you want to listen for (e.g., `checkout.session.completed`, `customer.subscription.updated`).
+- `BILLING.SUBSCRIPTION.CREATED`
+- `BILLING.SUBSCRIPTION.ACTIVATED`
+- `BILLING.SUBSCRIPTION.UPDATED`
+- `BILLING.SUBSCRIPTION.CANCELLED`
+- `BILLING.SUBSCRIPTION.SUSPENDED`
+- `BILLING.SUBSCRIPTION.EXPIRED`
+- `BILLING.SUBSCRIPTION.PAYMENT.FAILED`
 
-### Deploy to Vercel
+The PayPal webhook handler verifies the PayPal signature and then fetches the canonical subscription state from PayPal before updating the database.
 
-1. Push your code to a GitHub repository.
-2. Connect your repository to [Vercel](https://vercel.com/) and deploy it.
-3. Follow the Vercel deployment process, which will guide you through setting up your project.
+## Database
 
-### Add environment variables
+The `teams` table stores provider-neutral subscription state plus provider-specific identifiers:
 
-In your Vercel project settings (or during deployment), add all the necessary environment variables. Make sure to update the values for the production environment, including:
+- `paymentProvider`
+- `stripeCustomerId`
+- `stripeSubscriptionId`
+- `stripeProductId`
+- `paypalSubscriptionId`
+- `paypalPlanId`
+- `planName`
+- `subscriptionStatus`
 
-1. `BASE_URL`: Set this to your production domain.
-2. `STRIPE_SECRET_KEY`: Use your Stripe secret key for the production environment.
-3. `STRIPE_WEBHOOK_SECRET`: Use the webhook secret from the production webhook you created in step 1.
-4. `POSTGRES_URL`: Set this to your production database URL.
-5. `AUTH_SECRET`: Set this to a random string. `openssl rand -base64 32` will generate one.
+Run migrations after updating:
 
-## Other Templates
+```bash
+pnpm db:migrate
+```
 
-While this template is intentionally minimal and to be used as a learning resource, there are other paid versions in the community which are more full-featured:
+## Testing
 
-- https://achromatic.dev
-- https://shipfa.st
-- https://makerkit.dev
-- https://zerotoshipped.com
-- https://turbostarter.dev
+Stripe test card:
+
+```text
+4242 4242 4242 4242
+```
+
+For PayPal, use sandbox buyer and merchant accounts and configure `PAYPAL_ENVIRONMENT=sandbox`.
+
+## Production Checklist
+
+- Set `BASE_URL` to the production domain.
+- Configure production Postgres and `AUTH_SECRET`.
+- Configure Stripe production secrets if Stripe is used.
+- Configure PayPal live credentials and `PAYPAL_ENVIRONMENT=live` if PayPal is used.
+- Register the correct production webhook URLs.
+- Run `pnpm db:migrate` before serving production traffic.
