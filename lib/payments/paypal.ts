@@ -10,8 +10,12 @@ export type PayPalSubscription = {
   links?: Array<{ href: string; rel: string; method?: string }>;
 };
 
+function isLiveEnvironment() {
+  return process.env.PAYPAL_ENVIRONMENT === 'live';
+}
+
 function getPayPalBaseUrl() {
-  return process.env.PAYPAL_ENVIRONMENT === 'live'
+  return isLiveEnvironment()
     ? 'https://api-m.paypal.com'
     : 'https://api-m.sandbox.paypal.com';
 }
@@ -20,6 +24,26 @@ function required(name: string) {
   const value = process.env[name];
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
   return value;
+}
+
+export function getAllowedPayPalPlanIds() {
+  return [required('PAYPAL_BASE_PLAN_ID'), required('PAYPAL_PLUS_PLAN_ID')];
+}
+
+export function assertAllowedPayPalPlan(planId: string) {
+  if (!getAllowedPayPalPlanIds().includes(planId)) {
+    throw new Error('Unsupported PayPal plan ID.');
+  }
+}
+
+export function getPayPalPlanName(planId: string) {
+  if (planId === process.env.PAYPAL_BASE_PLAN_ID) {
+    return process.env.PAYPAL_BASE_PLAN_NAME || 'Base';
+  }
+  if (planId === process.env.PAYPAL_PLUS_PLAN_ID) {
+    return process.env.PAYPAL_PLUS_PLAN_NAME || 'Plus';
+  }
+  throw new Error('Unsupported PayPal plan ID.');
 }
 
 export async function getPayPalAccessToken() {
@@ -72,6 +96,8 @@ export async function createPayPalCheckout({
   team: Team | null;
   planId: string;
 }) {
+  assertAllowedPayPalPlan(planId);
+
   const user = await getUser();
   if (!team || !user) {
     redirect(`/sign-up?redirect=checkout&priceId=${encodeURIComponent(planId)}`);
@@ -163,8 +189,11 @@ export function getPayPalPlans() {
 }
 
 export function getPayPalManageUrl() {
-  return (
-    process.env.PAYPAL_MANAGE_SUBSCRIPTIONS_URL ||
-    'https://www.paypal.com/myaccount/autopay/'
-  );
+  if (process.env.PAYPAL_MANAGE_SUBSCRIPTIONS_URL) {
+    return process.env.PAYPAL_MANAGE_SUBSCRIPTIONS_URL;
+  }
+
+  return isLiveEnvironment()
+    ? 'https://www.paypal.com/myaccount/autopay/'
+    : 'https://www.sandbox.paypal.com/myaccount/autopay/';
 }
