@@ -29,11 +29,7 @@ export async function getUser() {
     .where(and(eq(users.id, sessionData.user.id), isNull(users.deletedAt)))
     .limit(1);
 
-  if (user.length === 0) {
-    return null;
-  }
-
-  return user[0];
+  return user[0] || null;
 }
 
 export async function getTeamByStripeCustomerId(customerId: string) {
@@ -43,33 +39,44 @@ export async function getTeamByStripeCustomerId(customerId: string) {
     .where(eq(teams.stripeCustomerId, customerId))
     .limit(1);
 
-  return result.length > 0 ? result[0] : null;
+  return result[0] || null;
+}
+
+export async function getTeamByPayPalSubscriptionId(subscriptionId: string) {
+  const result = await db
+    .select()
+    .from(teams)
+    .where(eq(teams.paypalSubscriptionId, subscriptionId))
+    .limit(1);
+
+  return result[0] || null;
 }
 
 export async function updateTeamSubscription(
   teamId: number,
-  subscriptionData: {
+  subscriptionData: Partial<{
+    paymentProvider: 'stripe' | 'paypal' | null;
+    stripeCustomerId: string | null;
     stripeSubscriptionId: string | null;
     stripeProductId: string | null;
+    paypalSubscriptionId: string | null;
+    paypalPlanId: string | null;
     planName: string | null;
-    subscriptionStatus: string;
-  }
+    subscriptionStatus: string | null;
+  }>
 ) {
   await db
     .update(teams)
     .set({
       ...subscriptionData,
-      updatedAt: new Date()
+      updatedAt: new Date(),
     })
     .where(eq(teams.id, teamId));
 }
 
 export async function getUserWithTeam(userId: number) {
   const result = await db
-    .select({
-      user: users,
-      teamId: teamMembers.teamId
-    })
+    .select({ user: users, teamId: teamMembers.teamId })
     .from(users)
     .leftJoin(teamMembers, eq(users.id, teamMembers.userId))
     .where(eq(users.id, userId))
@@ -80,17 +87,15 @@ export async function getUserWithTeam(userId: number) {
 
 export async function getActivityLogs() {
   const user = await getUser();
-  if (!user) {
-    throw new Error('User not authenticated');
-  }
+  if (!user) throw new Error('User not authenticated');
 
-  return await db
+  return db
     .select({
       id: activityLogs.id,
       action: activityLogs.action,
       timestamp: activityLogs.timestamp,
       ipAddress: activityLogs.ipAddress,
-      userName: users.name
+      userName: users.name,
     })
     .from(activityLogs)
     .leftJoin(users, eq(activityLogs.userId, users.id))
@@ -101,9 +106,7 @@ export async function getActivityLogs() {
 
 export async function getTeamForUser() {
   const user = await getUser();
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   const result = await db.query.teamMembers.findFirst({
     where: eq(teamMembers.userId, user.id),
@@ -113,17 +116,13 @@ export async function getTeamForUser() {
           teamMembers: {
             with: {
               user: {
-                columns: {
-                  id: true,
-                  name: true,
-                  email: true
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+                columns: { id: true, name: true, email: true },
+              },
+            },
+          },
+        },
+      },
+    },
   });
 
   return result?.team || null;
