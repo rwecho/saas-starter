@@ -3,10 +3,24 @@ import { Check } from 'lucide-react';
 import { getPricingPlans } from '@/lib/payments/catalog';
 import { SubmitButton } from './submit-button';
 
-export const revalidate = 3600;
+export const dynamic = 'force-dynamic';
 
 export default async function PricingPage() {
   const plans = await getPricingPlans();
+
+  if (plans.length === 0) {
+    return (
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-900">
+          <h1 className="text-xl font-semibold mb-2">Payments are not configured yet</h1>
+          <p className="text-sm">
+            Configure Stripe or PayPal environment variables to enable pricing and checkout.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   const basePlan = plans.find((plan) => plan.name === 'Base') || plans[0];
   const plusPlan = plans.find((plan) => plan.name === 'Plus') || plans[1];
 
